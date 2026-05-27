@@ -10,7 +10,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 BOT_TOKEN = "8613558590:AAFrlwYM10Zk912jyYG6-qu19F38ccJi5gQ"
 CHANNEL_ID = -1003805473602
-DOWNLOAD_FOLDER = "videos and photos"
+DOWNLOAD_FOLDER = "videos_and_photos" # Заменил пробел на подчеркивание для безопасности путей
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 bot = Bot(token=BOT_TOKEN)
@@ -30,7 +30,8 @@ async def check_subscription(user_id: int) -> bool:
     try:
         member = await bot.get_chat_member(CHANNEL_ID, user_id)
         return member.status in ["member", "administrator", "creator"]
-    except:
+    except Exception as e:
+        print(f"Ошибка проверки подписки: {e}")
         return False
 
 
@@ -40,10 +41,6 @@ def download_video(url: str, filename: str, quality: str) -> str | None:
         "outtmpl": output_path,
         "format": QUALITIES[quality],
         "noplaylist": True,
-        # Включаем авторизацию OAuth вместо файла куки
-        "username": "oauth2",
-        "password": "",
-        "cache_dir": "/tmp/yt-dlp-cache",  # Папка для сохранения токена на сервере
         "merge_output_format": "mp4",
         "concurrent_fragment_downloads": 5,
         "buffersize": 1024,
@@ -58,22 +55,21 @@ def download_video(url: str, filename: str, quality: str) -> str | None:
             return output_path
         return None
     except Exception as e:
-        print(f"Ошибка при скачивании: {e}")
+        print(f"Ошибка при скачивании видео: {e}")
         return None
 
 def download_mp3(url: str, filename: str) -> str | None:
-    output_path = os.path.join(DOWNLOAD_FOLDER, filename)
+    # Имя файла на выходе должно быть сразу с расширением .mp3 для корректной работы
+    output_path = os.path.join(DOWNLOAD_FOLDER, filename.replace(".mp3", ""))
     ydl_opts = {
-        "outtmpl": output_path,
+        "outtmpl": f"{output_path}.%(ext)s",
         "format": "bestaudio/best",
         "noplaylist": True,
-        "username": "oauth2",
-        "password": "",
-        "cache_dir": "/tmp/yt-dlp-cache",
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
-            "preferredquality": "192",
+            "preferr
+edquality": "192",
         }],
         "http_headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -82,18 +78,14 @@ def download_mp3(url: str, filename: str) -> str | None:
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
-        mp3_path = output_path.replace(".mp3", "") + ".mp3"
-        if os.path.exists(mp3_path):
-            return mp3_path
-        # Ищем любой mp3 файл
-        for f in os.listdir(DOWNLOAD_FOLDER):
-            if f.endswith(".mp3"):
-                return os.path.join(DOWNLOAD_FOLDER, f)
+        
+        expected_mp3 = f"{output_path}.mp3"
+        if os.path.exists(expected_mp3):
+            return expected_mp3
         return None
     except Exception as e:
         print(f"Ошибка при скачивании MP3: {e}")
         return None
-
 
 
 def format_keyboard():
@@ -144,10 +136,12 @@ async def quality_chosen(callback: CallbackQuery):
         filepath = await asyncio.get_event_loop().run_in_executor(
             None, download_mp3, url, filename
         )
-        del user_urls[user_id]
+        
+        # Удаляем ссылку из памяти сразу после запуска скачивания
+        user_urls.pop(user_id, None)
 
         if filepath is None or not os.path.exists(filepath):
-            await callback.message.edit_text("❌ Не удалось скачать MP3. Попробуй другое видео.")
+            await callback.message.edit_text("❌ Не удалось скачать MP3. Попробуй другое видео.\n(Возможно, на сервере не установлен ffmpeg)")
             return
 
         await callback.message.edit_text("📤 Отправляю MP3...")
@@ -158,24 +152,28 @@ async def quality_chosen(callback: CallbackQuery):
             print(f"Ошибка при отправке MP3: {e}")
             await callback.message.answer("❌ Не удалось отправить файл.")
         finally:
-            if os.path.exists(filepath):
+            if filepath and os.path.exists(filepath):
                 os.remove(filepath)
-            await callback.message.delete()
+            try:
+                await callback.message.delete()
+            except:
+                pass
     else:
         await callback.message.edit_text(f"⏳ Скачиваю в {choice}, подожди...")
         filename = f"video_{uuid.uuid4().hex[:8]}.mp4"
         filepath = await asyncio.get_event_loop().run_in_executor(
             None, download_video, url, filename, choice
         )
-        del user_urls[user_id]
+        
+        user_urls.pop(user_id, None)
 
         if filepath is None or not os.path.exists(filepath):
             await callback.message.edit_text("❌ Не удалось скачать видео. Попробуй другое видео.")
             return
 
         file_size = os.path.getsize(filepath)
-        if file_size > 50 * 1024 * 1024:
-            await callback.message.edit_text("❌ Видео слишком большое (больше 50 МБ).")
+if file_size > 50 * 1024 * 1024:
+            await callback.message.edit_text("❌ Видео слишком большое (больше 50 МБ для обычных ботов Телеграм).")
             os.remove(filepath)
             return
 
@@ -184,12 +182,15 @@ async def quality_chosen(callback: CallbackQuery):
             video = FSInputFile(filepath)
             await callback.message.answer_video(video=video, caption=f"✅ Готово! Качество: {choice} 🎬")
         except Exception as e:
-print(f"Ошибка при отправке: {e}")
+            print(f"Ошибка при отправке: {e}")
             await callback.message.answer("❌ Не удалось отправить видео.")
         finally:
-            if os.path.exists(filepath):
+            if filepath and os.path.exists(filepath):
                 os.remove(filepath)
-            await callback.message.delete()
+            try:
+                await callback.message.delete()
+            except:
+                pass
 
 
 @dp.message(F.text)
@@ -219,4 +220,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-```
+``
