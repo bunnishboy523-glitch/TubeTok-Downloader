@@ -61,17 +61,15 @@ def download_video(url: str, filename: str, quality: str) -> str | None:
         print(f"Ошибка при скачивании: {e}")
         return None
 
-
 def download_mp3(url: str, filename: str) -> str | None:
     output_path = os.path.join(DOWNLOAD_FOLDER, filename)
     ydl_opts = {
         "outtmpl": output_path,
         "format": "bestaudio/best",
         "noplaylist": True,
-        # Включаем авторизацию OAuth вместо файла куки
         "username": "oauth2",
         "password": "",
-        "cache_dir": "/tmp/yt-dlp-cache",  # Папка для сохранения токена на сервере
+        "cache_dir": "/tmp/yt-dlp-cache",
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
@@ -85,8 +83,7 @@ def download_mp3(url: str, filename: str) -> str | None:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
         mp3_path = output_path.replace(".mp3", "") + ".mp3"
-        if os.path
-.exists(mp3_path):
+        if os.path.exists(mp3_path):
             return mp3_path
         # Ищем любой mp3 файл
         for f in os.listdir(DOWNLOAD_FOLDER):
@@ -96,6 +93,7 @@ def download_mp3(url: str, filename: str) -> str | None:
     except Exception as e:
         print(f"Ошибка при скачивании MP3: {e}")
         return None
+
 
 
 def format_keyboard():
