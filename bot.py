@@ -10,7 +10,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 BOT_TOKEN = "8613558590:AAFrlwYM10Zk912jyYG6-qu19F38ccJi5gQ"
 CHANNEL_ID = -1003805473602
-DOWNLOAD_FOLDER = "videos_and_photos" # Заменил пробел на подчеркивание для безопасности путей
+DOWNLOAD_FOLDER = "videos_and_photos"
 os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
 
 bot = Bot(token=BOT_TOKEN)
@@ -58,35 +58,6 @@ def download_video(url: str, filename: str, quality: str) -> str | None:
         print(f"Ошибка при скачивании видео: {e}")
         return None
 
-def download_mp3(url: str, filename: str) -> str | None:
-    # Имя файла на выходе должно быть сразу с расширением .mp3 для корректной работы
-    output_path = os.path.join(DOWNLOAD_FOLDER, filename.replace(".mp3", ""))
-    ydl_opts = {
-        "outtmpl": f"{output_path}.%(ext)s",
-        "format": "bestaudio/best",
-        "noplaylist": True,
-        "postprocessors": [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferr
-edquality": "192",
-        }],
-        "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        },
-    }
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        
-        expected_mp3 = f"{output_path}.mp3"
-        if os.path.exists(expected_mp3):
-            return expected_mp3
-        return None
-    except Exception as e:
-        print(f"Ошибка при скачивании MP3: {e}")
-        return None
-
 
 def format_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -94,7 +65,6 @@ def format_keyboard():
          InlineKeyboardButton(text="📊 480p", callback_data="q_480p")],
         [InlineKeyboardButton(text="📈 720p", callback_data="q_720p"),
          InlineKeyboardButton(text="🔝 1080p", callback_data="q_1080p")],
-        [InlineKeyboardButton(text="🎵 MP3", callback_data="q_mp3")],
     ])
 
 
@@ -108,12 +78,13 @@ async def cmd_start(message: Message):
         ])
         await message.answer("👋 Привет!\n\nЧтобы пользоваться ботом, нужно подписаться на наш канал 👇", reply_markup=keyboard)
     else:
-        await message.answer("👋 Привет! Отправь мне ссылку на видео с YouTube или TikTok — выберешь качество или скачаешь как MP3!")
+        await message.answer("👋 Привет! Отправь мне ссылку на видео с YouTube или TikTok — выберешь качество для скачивания!")
 
 
 @dp.callback_query(F.data == "check_sub")
 async def check_sub_callback(callback: CallbackQuery):
-    subscribed = await check_subscription(callback.from_user.id)
+    subscribed = await check_subscription(c
+allback.from_user.id)
     if subscribed:
         await callback.message.edit_text("✅ Отлично! Теперь отправь мне ссылку на видео!")
     else:
@@ -130,67 +101,38 @@ async def quality_chosen(callback: CallbackQuery):
         await callback.answer("❌ Ссылка устарела, отправь снова.", show_alert=True)
         return
 
-    if choice == "mp3":
-        await callback.message.edit_text("⏳ Извлекаю аудио в MP3, подожди...")
-        filename = f"audio_{uuid.uuid4().hex[:8]}.mp3"
-        filepath = await asyncio.get_event_loop().run_in_executor(
-            None, download_mp3, url, filename
-        )
-        
-        # Удаляем ссылку из памяти сразу после запуска скачивания
-        user_urls.pop(user_id, None)
+    await callback.message.edit_text(f"⏳ Скачиваю в {choice}, подожди...")
+    filename = f"video_{uuid.uuid4().hex[:8]}.mp4"
+    filepath = await asyncio.get_event_loop().run_in_executor(
+        None, download_video, url, filename, choice
+    )
+    
+    user_urls.pop(user_id, None)
 
-        if filepath is None or not os.path.exists(filepath):
-            await callback.message.edit_text("❌ Не удалось скачать MP3. Попробуй другое видео.\n(Возможно, на сервере не установлен ffmpeg)")
-            return
+    if filepath is None or not os.path.exists(filepath):
+        await callback.message.edit_text("❌ Не удалось скачать видео. Попробуй другое качество или ссылку.")
+        return
 
-        await callback.message.edit_text("📤 Отправляю MP3...")
-        try:
-            audio = FSInputFile(filepath)
-            await callback.message.answer_audio(audio=audio, caption="✅ Готово! 🎵")
-        except Exception as e:
-            print(f"Ошибка при отправке MP3: {e}")
-            await callback.message.answer("❌ Не удалось отправить файл.")
-        finally:
-            if filepath and os.path.exists(filepath):
-                os.remove(filepath)
-            try:
-                await callback.message.delete()
-            except:
-                pass
-    else:
-        await callback.message.edit_text(f"⏳ Скачиваю в {choice}, подожди...")
-        filename = f"video_{uuid.uuid4().hex[:8]}.mp4"
-        filepath = await asyncio.get_event_loop().run_in_executor(
-            None, download_video, url, filename, choice
-        )
-        
-        user_urls.pop(user_id, None)
+    file_size = os.path.getsize(filepath)
+    if file_size > 50 * 1024 * 1024:
+        await callback.message.edit_text("❌ Видео слишком большое (больше 50 МБ).")
+        os.remove(filepath)
+        return
 
-        if filepath is None or not os.path.exists(filepath):
-            await callback.message.edit_text("❌ Не удалось скачать видео. Попробуй другое видео.")
-            return
-
-        file_size = os.path.getsize(filepath)
-if file_size > 50 * 1024 * 1024:
-            await callback.message.edit_text("❌ Видео слишком большое (больше 50 МБ для обычных ботов Телеграм).")
+    await callback.message.edit_text("📤 Отправляю видео...")
+    try:
+        video = FSInputFile(filepath)
+        await callback.message.answer_video(video=video, caption=f"✅ Готово! Качество: {choice} 🎬")
+    except Exception as e:
+        print(f"Ошибка при отправке: {e}")
+        await callback.message.answer("❌ Не удалось отправить видео.")
+    finally:
+        if filepath and os.path.exists(filepath):
             os.remove(filepath)
-            return
-
-        await callback.message.edit_text("📤 Отправляю видео...")
         try:
-            video = FSInputFile(filepath)
-            await callback.message.answer_video(video=video, caption=f"✅ Готово! Качество: {choice} 🎬")
-        except Exception as e:
-            print(f"Ошибка при отправке: {e}")
-            await callback.message.answer("❌ Не удалось отправить видео.")
-        finally:
-            if filepath and os.path.exists(filepath):
-                os.remove(filepath)
-            try:
-                await callback.message.delete()
-            except:
-                pass
+            await callback.message.delete()
+        except:
+            pass
 
 
 @dp.message(F.text)
@@ -220,4 +162,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-``
+```
