@@ -1,3 +1,4 @@
+```python
 import os
 import asyncio
 import yt_dlp
@@ -40,7 +41,10 @@ def download_video(url: str, filename: str, quality: str) -> str | None:
         "outtmpl": output_path,
         "format": QUALITIES[quality],
         "noplaylist": True,
-        "cookiesfile": "C:/Users/user/Downloads/cookies.txt",
+        # Включаем авторизацию OAuth вместо файла куки
+        "username": "oauth2",
+        "password": "",
+        "cache_dir": "/tmp/yt-dlp-cache",  # Папка для сохранения токена на сервере
         "merge_output_format": "mp4",
         "concurrent_fragment_downloads": 5,
         "buffersize": 1024,
@@ -65,7 +69,10 @@ def download_mp3(url: str, filename: str) -> str | None:
         "outtmpl": output_path,
         "format": "bestaudio/best",
         "noplaylist": True,
-        "cookiesfile": "C:/Users/user/Downloads/cookies.txt",
+        # Включаем авторизацию OAuth вместо файла куки
+        "username": "oauth2",
+        "password": "",
+        "cache_dir": "/tmp/yt-dlp-cache",  # Папка для сохранения токена на сервере
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
@@ -79,7 +86,8 @@ def download_mp3(url: str, filename: str) -> str | None:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
         mp3_path = output_path.replace(".mp3", "") + ".mp3"
-        if os.path.exists(mp3_path):
+        if os.path
+.exists(mp3_path):
             return mp3_path
         # Ищем любой mp3 файл
         for f in os.listdir(DOWNLOAD_FOLDER):
@@ -179,7 +187,7 @@ async def quality_chosen(callback: CallbackQuery):
             video = FSInputFile(filepath)
             await callback.message.answer_video(video=video, caption=f"✅ Готово! Качество: {choice} 🎬")
         except Exception as e:
-            print(f"Ошибка при отправке: {e}")
+print(f"Ошибка при отправке: {e}")
             await callback.message.answer("❌ Не удалось отправить видео.")
         finally:
             if os.path.exists(filepath):
@@ -214,3 +222,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+```
