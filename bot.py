@@ -97,8 +97,7 @@ async def quality_chosen(callback: CallbackQuery):
     url = user_urls.get(user_id)
 
     if not url:
-        a
-        wait callback.answer("❌ Ссылка устарела, отправь снова.", show_alert=True)
+        await callback.answer("❌ Ссылка устарела, отправь снова.", show_alert=True)
         return
 
     await callback.message.edit_text(f"⏳ Скачиваю в {choice}, подожди...")
