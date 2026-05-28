@@ -7,6 +7,7 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, FSInputFile, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import CommandStart
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiohttp import web
 
 BOT_TOKEN = "8613558590:AAFrlwYM10Zk912jyYG6-qu19F38ccJi5gQ"
 CHANNEL_ID = -1003805473602
@@ -19,6 +20,21 @@ dp = Dispatcher(storage=MemoryStorage())
 user_urls = {}
 
 API_URL = "https://api.cobalt.tools/api/json"
+
+
+async def handle_ping(request):
+    return web.Response(text="Бот работает!")
+
+
+async def start_web_server():
+    app = web.Application()
+    app.router.add_get("/", handle_ping)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    print(f"🌍 Веб-сервер запущен на порту {port} для обмана Render!")
 
 
 async def check_subscription(user_id: int) -> bool:
@@ -107,6 +123,7 @@ async def quality_chosen(callback: CallbackQuery):
     choice = callback.data[2:]
     user_id = callback.from_user.id
     url = user_urls.get(user_id)
+
     if not url:
         await callback.answer("❌ Ссылка устарела, отправь снова.", show_alert=True)
         return
@@ -191,6 +208,7 @@ async def handle_link(message: Message):
 
 
 async def main():
+    asyncio.create_task(start_web_server())
     print("🤖 Бот запущен! Нажми Ctrl+C для остановки.")
     await dp.start_polling(bot)
 
