@@ -83,8 +83,7 @@ async def cmd_start(message: Message):
 
 @dp.callback_query(F.data == "check_sub")
 async def check_sub_callback(callback: CallbackQuery):
-    subscribed = await check_subscription(c
-allback.from_user.id)
+    subscribed = await check_subscription(callback.from_user.id)
     if subscribed:
         await callback.message.edit_text("✅ Отлично! Теперь отправь мне ссылку на видео!")
     else:
@@ -98,7 +97,8 @@ async def quality_chosen(callback: CallbackQuery):
     url = user_urls.get(user_id)
 
     if not url:
-        await callback.answer("❌ Ссылка устарела, отправь снова.", show_alert=True)
+        a
+        wait callback.answer("❌ Ссылка устарела, отправь снова.", show_alert=True)
         return
 
     await callback.message.edit_text(f"⏳ Скачиваю в {choice}, подожди...")
