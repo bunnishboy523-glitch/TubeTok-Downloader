@@ -1,6 +1,6 @@
 import os
 import asyncio
-import yt_dlp
+import aiohttp
 import uuid
 
 from aiogram import Bot, Dispatcher, F
@@ -18,12 +18,7 @@ dp = Dispatcher(storage=MemoryStorage())
 
 user_urls = {}
 
-QUALITIES = {
-    "360p": "best[height<=360][ext=mp4]/best[height<=360]",
-    "480p": "best[height<=480][ext=mp4]/best[height<=480]",
-    "720p": "best[height<=720][ext=mp4]/best[height<=720]",
-    "1080p": "best[height<=1080][ext=mp4]/best[height<=1080]",
-}
+API_URL = "https://api.cobalt.tools/api/json"
 
 
 async def check_subscription(user_id: int) -> bool:
@@ -35,79 +30,43 @@ async def check_subscription(user_id: int) -> bool:
         return False
 
 
-def download_video(url: str, filename: str, quality: str) -> str | None:
-    output_path = os.path.join(DOWNLOAD_FOLDER, filename)
-    ydl_opts = {
-        "outtmpl": output_path,
-        "format": QUALITIES[quality],
-        "noplaylist": True,
-        "merge_output_format": "mp4",
-        "concurrent_fragment_downloads": 5,
-        "buffersize": 1024,
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["android", "web"],
-                "skip": ["auth"],
-            }
-        },
-        "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-        },
+async def download_via_api(url: str, filename: str, is_audio: bool = False, quality: str = "720") -> str | None:
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     }
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        if os.path.exists(output_path):
-            return output_path
-        return None
-    except Exception as e:
-        print(f"Ошибка при скачивании видео: {e}")
-        return None
-
-
-
-def download_audio_direct(url: str, filename: str) -> str | None:
-    output_path = os.path.join(DOWNLOAD_FOLDER, filename)
-    ydl_opts = {
-        "outtmpl": f"{output_path}.%(ext)s",
-        "format": "ba/b",  # Выбираем только аудио (best audio)
-        "noplaylist": True,
-        # Обход блокировок YouTube: притворяемся обычным клиентом Android / Web
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["android", "web"],
-                "skip": ["auth"],
-            }
-        },
-        "ignoreerrors": True,
-        "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-        },
+    
+    payload = {
+        "url": url,
+        "videoQuality": quality,
+        "isAudioOnly": is_audio,
+        "filenamePattern": "basic"
     }
+
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            if not info:
-                return None
-            
-            # Проверяем, какое расширение в итоге скачалось
-            ext = info.get("ext", "m4a")
-            full_path = f"{output_path}.{ext}"
-            
-            if os.path.exists(full_path):
-                return full_path
+        async with aiohttp.ClientSession() as session:
+            async with session.post(API_URL, json=payload, headers=headers) as response:
+                if response.status != 200:
+                    print(f"API вернул ошибку: {response.status}")
+                    return None
                 
-            # Если не нашли по стандартному пути, ищем любой файл с этим префиксом
-            for f in os.listdir(DOWNLOAD_FOLDER):
-                if f.startswith(filename):
-                    return os.path.join(DOWNLOAD_FOLDER, f)
+                result = await response.json()
+                file_url = result.get("url")
+                
+                if not file_url:
+                    print("API не вернул прямую ссылку на файл")
+                    return None
+                
+                output_path = os.path.join(DOWNLOAD_FOLDER, filename)
+                async with session.get(file_url) as file_resp:
+                    if file_resp.status == 200:
+                        with open(output_path, "wb") as f:
+                            f.write(await file_resp.read())
+                        return output_path
         return None
     except Exception as e:
-        print(f"Ошибка при скачивании аудио: {e}")
+        print(f"Ошибка при скачивании через API: {e}")
         return None
 
 
@@ -116,9 +75,8 @@ def format_keyboard():
         [InlineKeyboardButton(text="📉 360p", callback_data="q_360p"),
          InlineKeyboardButton(text="📊 480p", callback_data="q_480p")],
         [InlineKeyboardButton(text="📈 720p", callback_data="q_720p"),
-         InlineKeyboardButton(text="🔝 1080p", callback_data="q_1080p"
-)],
-        [InlineKeyboardButton(text="🎵 Аудио (M4A/WebM)", callback_data="q_audio")],
+         InlineKeyboardButton(text="🔝 1080p", callback_data="q_1080p")],
+        [InlineKeyboardButton(text="🎵 Аудио (M4A/MP3)", callback_data="q_audio")],
     ])
 
 
@@ -149,18 +107,15 @@ async def quality_chosen(callback: CallbackQuery):
     choice = callback.data[2:]
     user_id = callback.from_user.id
     url = user_urls.get(user_id)
-
     if not url:
         await callback.answer("❌ Ссылка устарела, отправь снова.", show_alert=True)
         return
 
     if choice == "audio":
         await callback.message.edit_text("⏳ Извлекаю аудио, подожди...")
-        filename = f"audio_{uuid.uuid4().hex[:8]}"
-        filepath = await asyncio.get_event_loop().run_in_executor(
-            None, download_audio_direct, url, filename
-        )
+        filename = f"audio_{uuid.uuid4().hex[:8]}.mp3"
         
+        filepath = await download_via_api(url, filename, is_audio=True)
         user_urls.pop(user_id, None)
 
         if filepath is None or not os.path.exists(filepath):
@@ -183,11 +138,10 @@ async def quality_chosen(callback: CallbackQuery):
                 pass
     else:
         await callback.message.edit_text(f"⏳ Скачиваю в {choice}, подожди...")
+        clean_quality = choice.replace("p", "")
         filename = f"video_{uuid.uuid4().hex[:8]}.mp4"
-        filepath = await asyncio.get_event_loop().run_in_executor(
-            None, download_video, url, filename, choice
-        )
         
+        filepath = await download_via_api(url, filename, is_audio=False, quality=clean_quality)
         user_urls.pop(user_id, None)
 
         if filepath is None or not os.path.exists(filepath):
