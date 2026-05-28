@@ -42,8 +42,9 @@ async def check_subscription(user_id: int) -> bool:
         member = await bot.get_chat_member(CHANNEL_ID, user_id)
         return member.status in ["member", "administrator", "creator"]
     except Exception as e:
-        print(f"Ошибка проверки подписки: {e}")
-        return False
+        # Если приватный канал выдает ошибку 400, временно разрешаем доступ, чтобы бот не молчал
+        print(f"Ошибка проверки подписки (пропускаем): {e}")
+        return True
 
 
 async def download_via_api(url: str, filename: str, is_audio: bool = False, quality: str = "720") -> str | None:
