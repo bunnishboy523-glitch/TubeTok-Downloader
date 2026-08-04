@@ -38,7 +38,7 @@ async def process_phone(message: types.Message, state: FSMContext):
     
     if match:
         phone_number = match.group(0)
-        response_text = f"Напишите мне в телеграмм с этого номера {phone_number}"
+        response_text = f"Всё готово ! https://t.me/{phone_number}"
         await message.answer(response_text)
         await state.clear()
     else:
