@@ -8,7 +8,7 @@ from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
 from aiohttp import web
 
 # --- Настройки бота ---
-TOKEN = "8613558590:AAFgkKzsIeAe5kaMVOnt0XiKltyDpTk5xI4Q"
+TOKEN = "8613558590:AAEPGMyeGmNSMpDLFeIcuGr9HbujQdu54Zw"
 PORT = 8080
 WEB_APP_URL = "https://tubetok-downloader-3.onrender.com/app"
 
