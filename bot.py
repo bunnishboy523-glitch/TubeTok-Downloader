@@ -22,12 +22,13 @@ logging.basicConfig(level=logging.INFO)
 class BotStates(StatesGroup):
     waiting_for_phone = State()
 
-PHONE_REGEX = r"\+998\d{9}"
+# Регулярное выражение: необязательный +998, затем верный код оператора и 7 цифр
+PHONE_REGEX = r"(?:\+998)?(33|50|77|88|90|91|93|94|95|97|98|99)\d{7}"
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
     await message.answer(
-        "Привет! Напишите мне номер телефона в формате <b>+99812345678</b>"
+        "Привет! Напишите мне номер телефона <b>с +998 или без него</b> (например: <code>+998901234567</code> или <code>901234567</code>)"
     )
     await state.set_state(BotStates.waiting_for_phone)
 
@@ -37,13 +38,18 @@ async def process_phone(message: types.Message, state: FSMContext):
     match = re.search(PHONE_REGEX, text)
     
     if match:
-        phone_number = match.group(0)
-        response_text = f"Всё готово ! https://t.me/{phone_number}"
+        # Извлекаем найденные группы: код оператора и оставшиеся 7 цифр
+        operator_code = match.group(1)
+        # Получаем полный хвост из 9 цифр (код оператора + 7 цифр номера)
+        full_number = operator_code + text[-7:]
+        
+        response_text = f"Всё готово ! https://t.me/+998{full_number}"
         await message.answer(response_text)
-        await state.clear()
+        # Состояние не сбрасываем, можно отправлять следующие номера
     else:
         await message.answer(
-            "❌ Неверный формат. Пожалуйста, отправьте номер в формате: <code>+99812345678</code>"
+            "❌ Неверный номер или код оператора. Пожалуйста, отправьте номер в формате "
+            "<code>+998901234567</code> или просто <code>901234567</code>"
         )
 
 # Фиктивный веб-сервер для удовлетворения требований бесплатного Web Service на Render
@@ -68,8 +74,4 @@ async def main():
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    asyncio.run(main())
-
-if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
