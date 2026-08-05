@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tubetok Downloader</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg-color: #0f0f0f;
+            --surface-color: #212121;
+            --primary-color: #ff0000;
+            --text-color: #ffffff;
+            --text-secondary: #aaa;
+            --border-radius: 12px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-color); padding-bottom: 70px; }
+        .header { position: sticky; top: 0; background-color: var(--bg-color); padding: 15px; display: flex; gap: 10px; z-index: 100; border-bottom: 1px solid #222; }
+        .search-box { flex: 1; display: flex; background-color: var(--surface-color); border-radius: 20px; padding: 8px 15px; border: 1px solid #333; }
+        .search-box input { width: 100%; background: none; border: none; color: var(--text-color); font-size: 15px; outline: none; }
+        .page { display: none; padding: 15px; }
+        .page.active { display: block; }
+        .download-card { background-color: var(--surface-color); border-radius: var(--border-radius); padding: 15px; margin-bottom: 15px; }
+        .download-card h3 { font-size: 16px; margin-bottom: 10px; }
+        input.url-input { width: 100%; padding: 12px; background-color: #121212; border: 1px solid #333; border-radius: 8px; color: white; font-size: 14px; margin-bottom: 10px; outline: none; }
+        button.action-btn { width: 100%; padding: 12px; background-color: var(--primary-color); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; }
+        .video-item { display: flex; gap: 12px; margin-bottom: 12px; background: var(--surface-color); padding: 10px; border-radius: 10px; cursor: pointer; align-items: center; }
+        .video-thumb { width: 120px; height: 70px; border-radius: 6px; object-fit: cover; background-color: #333; }
+        .video-info h4 { font-size: 13px; line-height: 1.3; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .video-info p { font-size: 11px; color: var(--text-secondary); }
+        .nav-bar { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--surface-color); display: flex; justify-content: space-around; padding: 10px 0; border-top: 1px solid #333; }
+        .nav-item { text-align: center; color: var(--text-secondary); font-size: 11px; cursor: pointer; flex: 1; }
+        .nav-item.active { color: var(--primary-color); }
+        .nav-item div { font-size: 20px; margin-bottom: 2px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="Поиск видео на YouTube..." onkeypress="handleSearch(event)">
+        </div>
+    </div>
+
+    <div id="page-home" class="page active">
+        <div class="download-card">
+            <h3>📥 Быстрая скачка</h3>
+            <input type="text" id="mainUrl" class="url-input" placeholder="Вставьте ссылку на YouTube / TikTok">
+            <button class="action-btn" onclick="sendDownload(document.getElementById('mainUrl').value)">Загрузить</button>
+        </div>
+        <h3 style="margin: 15px 0 10px 0; font-size: 16px;" id="listTitle">🔥 Рекомендации</h3>
+        <div id="resultsList">
+            <p style="color: var(--text-secondary); text-align: center; font-size: 13px;">Введите запрос в поиск сверху, чтобы найти видео на YouTube.</p>
+        </div>
+    </div>
+
+    <div id="page-subs" class="page">
+        <h3 style="margin-bottom: 15px;">🔔 Подписки</h3>
+        <p style="color: var(--text-secondary); text-align: center; margin-top: 40px;">Здесь появятся ваши избранные каналы.</p>
+    </div>
+
+    <div id="page-downloads" class="page">
+        <h3 style="margin-bottom: 15px;">📂 История</h3>
+        <p style="color: var(--text-secondary); text-align: center; margin-top: 40px;">История пуста.</p>
+    </div>
+
+    <div class="nav-bar">
+        <div class="nav-item active" onclick="switchPage('home', this)"><div>🏠</div>Главная</div>
+        <div class="nav-item" onclick="switchPage('subs', this)"><div>🔔</div>Подписки</div>
+        <div class="nav-item" onclick="switchPage('downloads', this)"><div>📂</div>История</div>
+    </div>
+
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+
+        function switchPage(pageName, element) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+            document.getElementById('page-' + pageName).classList.add('active');
+            element.classList.add('active');
+        }
+
+        function sendDownload(url) {
+            if (!url) { alert('Введите ссылку!'); return; }
+            tg.sendData(JSON.stringify({ action: "download", url: url }));
+        }
+
+        async function handleSearch(e) {
+            if (e.key === 'Enter') {
+                const query = document.getElementById('searchInput').value.trim();
+                if (!query) return;
+                if (query.includes('http://') || query.includes('https://')) {
+                    sendDownload(query);
+                    return;
+                }
+                document.getElementById('listTitle').innerText = `🔎 Результаты поиска: "${query}"`;
+                const resultsList = document.getElementById('resultsList');
+                resultsList.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">Ищем видео...</p>';
+
+                try {
+                    let response = await fetch(`https://pipedapi.kavin.rocks/search?q=${encodeURIComponent(query)}&filter=videos`);
+                    let data = await response.json();
+                    let items = data.items || [];
+                    resultsList.innerHTML = '';
+                    
+                    if (items.length === 0) {
+                        resultsList.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">Ничего не найдено</p>';
+                        return;
+                    }
+
+                    items.slice(0, 10).forEach(video => {
+                        let videoId = video.url ? video.url.split('v=')[1] : '';
+                        if (!videoId) return;
+                        let title = video.title || 'Без названия';
+                        let author = video.uploaderName || 'YouTube Channel';
+                        let thumbUrl = video.thumbnail || `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+                        let watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+                        let item = document.createElement('div');
+                        item.className = 'video-item';
+                        item.onclick = () => {
+                            if (confirm(`Скачать видео:\n"${title}"?`)) { sendDownload(watchUrl); }
+                        };
+                        item.innerHTML = `
+                            <img class="video-thumb" src="${thumbUrl}" alt="thumb">
+                            <div class="video-info">
+                                <h4>${title}</h4>
+                                <p>${author}</p>
+                            </div>
+                        `;
+                        resultsList.appendChild(item);
+                    });
+                } catch (err) {
+                    resultsList.innerHTML = '<p style="color: #ff4757; text-align: center;">Ошибка поиска. Попробуйте еще раз.</p>';
+                }
+            }
+        }
+    </script>
+</body>
+</html>
