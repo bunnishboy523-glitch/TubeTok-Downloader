@@ -5,7 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
 # Твой токен бота от BotFather
-TOKEN = "ТВОЙ_ТОКЕН_БОТА"
+TOKEN = "8613558590:AAEPGMyeGmNSMpDLFeIcuGr9HbujQdu54Zw"
 
 # Ссылка на твое развернутое мини-приложение (на Render)
 WEB_APP_URL = "https://t-02-1.onrender.com"
