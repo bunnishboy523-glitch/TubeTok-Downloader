@@ -21,10 +21,7 @@
         .search-box input { width: 100%; background: none; border: none; color: var(--text-color); font-size: 15px; outline: none; }
         .page { display: none; padding: 15px; }
         .page.active { display: block; }
-        .download-card { background-color: var(--surface-color); border-radius: var(--border-radius); padding: 15px; margin-bottom: 15px; }
-        .download-card h3 { font-size: 16px; margin-bottom: 10px; }
-        input.url-input { width: 100%; padding: 12px; background-color: #121212; border: 1px solid #333; border-radius: 8px; color: white; font-size: 14px; margin-bottom: 10px; outline: none; }
-        button.action-btn { width: 100%; padding: 12px; background-color: var(--primary-color); color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; }
+        .info-card { background-color: var(--surface-color); border-radius: var(--border-radius); padding: 15px; margin-bottom: 15px; text-align: center; color: var(--text-secondary); font-size: 14px; line-height: 1.4; }
         .video-item { display: flex; gap: 12px; margin-bottom: 12px; background: var(--surface-color); padding: 10px; border-radius: 10px; cursor: pointer; align-items: center; }
         .video-thumb { width: 120px; height: 70px; border-radius: 6px; object-fit: cover; background-color: #333; }
         .video-info h4 { font-size: 13px; line-height: 1.3; margin-bottom: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -43,14 +40,12 @@
     </div>
 
     <div id="page-home" class="page active">
-        <div class="download-card">
-            <h3>📥 Быстрая скачка</h3>
-            <input type="text" id="mainUrl" class="url-input" placeholder="Вставьте ссылку на YouTube / TikTok">
-            <button class="action-btn" onclick="sendDownload(document.getElementById('mainUrl').value)">Загрузить</button>
+        <div class="info-card">
+            💡 <b>Как скачивать видео:</b> найдите нужное видео через поиск выше и нажмите на него, либо просто отправьте ссылку на YouTube или TikTok в чат с ботом!
         </div>
         <h3 style="margin: 15px 0 10px 0; font-size: 16px;" id="listTitle">🔥 Рекомендации</h3>
         <div id="resultsList">
-            <p style="color: var(--text-secondary); text-align: center; font-size: 13px;">Введите запрос в поиск сверху, чтобы найти видео на YouTube.</p>
+            <p style="color: var(--text-secondary); text-align: center; font-size: 13px;">Введите запрос в поиск сверху и нажмите Enter.</p>
         </div>
     </div>
 
@@ -81,19 +76,11 @@
             element.classList.add('active');
         }
 
-        function sendDownload(url) {
-            if (!url) { alert('Введите ссылку!'); return; }
-            tg.sendData(JSON.stringify({ action: "download", url: url }));
-        }
-
         async function handleSearch(e) {
             if (e.key === 'Enter') {
                 const query = document.getElementById('searchInput').value.trim();
                 if (!query) return;
-                if (query.includes('http://') || query.includes('https://')) {
-                    sendDownload(query);
-                    return;
-                }
+                
                 document.getElementById('listTitle').innerText = `🔎 Результаты поиска: "${query}"`;
                 const resultsList = document.getElementById('resultsList');
                 resultsList.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">Ищем видео...</p>';
@@ -120,7 +107,8 @@
                         let item = document.createElement('div');
                         item.className = 'video-item';
                         item.onclick = () => {
-                            if (confirm(`Скачать видео:\n"${title}"?`)) { sendDownload(watchUrl); }
+                            // При клике на видео в мини-приложении показываем ссылку, которую можно скопировать для отправки боту
+                            prompt("Скопируйте ссылку и отправьте её в чат с ботом для скачивания:", watchUrl);
                         };
                         item.innerHTML = `
                             <img class="video-thumb" src="${thumbUrl}" alt="thumb">
