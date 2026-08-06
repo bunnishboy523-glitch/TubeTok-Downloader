@@ -3,21 +3,24 @@ import asyncio
 import os
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, LabeledPrice
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, LabeledPrice, InlineQueryResultArticle, InputTextMessageContent
 import yt_dlp
+from aiohttp import web
 
-TOKEN = "8613558590:AAEPGMyeGmNSMpDLFeIcuGr9HbujQdu54Zw"
+TOKEN = "ТВОЙ_ТОКЕН_БОТА"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# База данных-заглушка для подписок (в реальном проекте лучше использовать SQLite/PostgreSQL)
-subscribers = set()
+# База данных-заглушка для подписок (твои ID добавлены для бесплатного премиум-доступа)
+subscribers = {8549738631, 8932750237}
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     await message.answer(
-        "👋 Привет! Отправь мне ссылку на видео, и я предложу варианты скачивания.\n\n",
+        "👋 Привет! Отправь мне ссылку на видео или используй инлайн-поиск в любом чате: "
+        "<code>@saveasyoutubeandtiktok_bot [запрос]</code>\n\n"
+        "⭐ Хочешь доступ к 4K, 2K, 144p и другим премиум-функциям? Напиши /sub",
         parse_mode="HTML"
     )
 
@@ -44,22 +47,18 @@ async def cmd_subscribe(message: types.Message):
 @dp.callback_query(F.data.startswith("buy_"))
 async def process_buy(callback: types.CallbackQuery):
     plan = callback.data.split("_")[1]
-    
     prices = {
         "month": (350, "Подписка на 1 месяц"),
         "6months": (1000, "Подписка на 6 месяцев"),
         "year": (1500, "Подписка на 1 год")
     }
-    
     amount, title = prices[plan]
-    
-    # Создаем инвойс для оплаты Telegram Stars
     await bot.send_invoice(
         chat_id=callback.message.chat.id,
         title=title,
         description="Доступ к премиум-функциям скачивания видео (4K, 2K, 144p и др.)",
         payload=f"sub_{plan}_{callback.from_user.id}",
-        currency="XTR",  # Валюта Telegram Stars
+        currency="XTR",
         prices=[LabeledPrice(label=title, amount=amount)]
     )
     await callback.answer()
@@ -72,9 +71,46 @@ async def pre_checkout(pre_checkout_query: types.PreCheckoutQuery):
 async def successful_payment(message: types.Message):
     user_id = message.from_user.id
     subscribers.add(user_id)
-    await message.answer("🎉 Спасибо за покупку! Подписка успешно активирована. Теперь вам доступны все форматы (4K, 2K, 144p и др.)!")
+    await message.answer("🎉 Спасибо за покупку! Подписка успешно активирована.")
 
-# Обработка ссылки
+# Инлайн-поиск (работает в любых чатах и группах)
+@dp.inline_query()
+async def inline_search(query: types.InlineQuery):
+    text = query.query.strip()
+    if not text:
+        return
+
+    ydl_opts = {'extract_flat': True, 'quiet': True, 'default_search': 'ytsearch5'}
+    results = []
+    try:
+        def search():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(f"ytsearch5:{text}", download=False).get('entries', [])
+        
+        loop = asyncio.get_running_loop()
+        videos = await loop.run_in_executor(None, search)
+
+        for i, v in enumerate(videos):
+            title = v.get('title', 'Видео')
+            url = v.get('url') or f"https://www.youtube.com/watch?v={v.get('id')}"
+            uploader = v.get('uploader', 'YouTube')
+            thumbnail = v.get('thumbnail') or f"https://img.youtube.com/vi/{v.get('id')}/hqdefault.jpg"
+            
+            results.append(
+                InlineQueryResultArticle(
+                    id=str(i),
+                    title=title,
+                    description=f"Автор: {uploader} | Нажми, чтобы отправить",
+                    thumbnail_url=thumbnail,
+                    input_message_content=InputTextMessageContent(message_text=url)
+                )
+            )
+    except Exception as e:
+        print(f"Ошибка инлайн-поиска: {e}")
+
+    await query.answer(results, cache_time=1)
+
+# Обработка ссылки (в личке и в группах)
 @dp.message(F.text.contains("http://") | F.text.contains("https://"))
 async def handle_url(message: types.Message):
     words = message.text.split()
@@ -84,7 +120,6 @@ async def handle_url(message: types.Message):
 
     is_sub = message.from_user.id in subscribers
 
-    # Формируем кнопки в зависимости от наличия подписки
     if is_sub:
         keyboard_buttons = [
             [InlineKeyboardButton(text="🎬 4K / 2K (Ultra HD)", callback_data=f"dl|4k|{url}")],
@@ -155,9 +190,24 @@ async def callback_download(callback: types.CallbackQuery):
         await callback.message.edit_text("❌ Ошибка при скачивании файла.")
         print(e)
 
+# Веб-сервер для удержания открытого порта на Render
+async def handle_ping(request):
+    return web.Response(text="Bot is running!")
+
+async def web_server():
+    app = web.Application()
+    app.router.add_get("/", handle_ping)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    print(f"Веб-сервер запущен на порту {port}")
+
 async def main():
     logging.basicConfig(level=logging.INFO)
-    print("Бот с тарифами за звезды запущен!")
+    print("Бот запущен!")
+    await web_server()
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
