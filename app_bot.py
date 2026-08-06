@@ -21,7 +21,7 @@ subscribers = {8549738631, 8932750237}
 class SearchState(StatesGroup):
     waiting_for_query = State()
 
-# Установка кнопки Menu и команд в интерфейсе Telegram
+# Установка кнопки Menu и команд в интерфейсе Telegram при запуске
 async def set_main_menu(bot: Bot):
     commands = [
         BotCommand(command="start", description="Главное меню"),
@@ -32,7 +32,8 @@ async def set_main_menu(bot: Bot):
     await bot.set_my_commands(commands)
 
 @dp.message(Command("start"))
-async def cmd_start(message: types.Message):
+async def cmd_start(message: types.Message, state: FSMContext):
+    await state.clear()
     await message.answer(
         "👋 Привет! Отправь мне ссылку на видео (YouTube / TikTok) для скачивания, "
         "или используй команду /search для поиска видео прямо в чате!\n\n"
@@ -92,7 +93,8 @@ async def process_search_query(message: types.Message, state: FSMContext):
         print(f"Ошибка поиска: {e}")
 
 @dp.message(Command("sub"))
-async def cmd_subscribe(message: types.Message):
+async def cmd_subscribe(message: types.Message, state: FSMContext):
+    await state.clear()
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="⭐ 350 ⭐ — месяц", callback_data="buy_month")],
@@ -112,7 +114,8 @@ async def cmd_subscribe(message: types.Message):
 
 # Команда /help с контактами поддержки
 @dp.message(Command("help"))
-async def cmd_help(message: types.Message):
+async def cmd_help(message: types.Message, state: FSMContext):
+    await state.clear()
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="👤 Поддержка 1", url="https://t.me/bshbmw")],
