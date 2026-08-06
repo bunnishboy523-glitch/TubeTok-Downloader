@@ -7,7 +7,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, LabeledPri
 import yt_dlp
 from aiohttp import web
 
-TOKEN = "ТВОЙ_ТОКЕН_БОТА"
+TOKEN = "8613558590:AAEPGMyeGmNSMpDLFeIcuGr9HbujQdu54Zw"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
