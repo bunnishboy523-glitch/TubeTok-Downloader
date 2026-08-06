@@ -32,30 +32,12 @@ async def set_main_menu(bot: Bot):
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🔍 Найти видео через бота", callback_data="start_search")],
-            [InlineKeyboardButton(text="⭐ Премиум (/sub)", callback_data="open_sub")],
-            [InlineKeyboardButton(text="💬 Поддержка (/help)", callback_data="open_help")]
-        ]
-    )
     await message.answer(
         "👋 Привет! Отправь мне ссылку на видео (YouTube / TikTok) для скачивания, "
-        "или нажми кнопку ниже, чтобы начать поиск видео прямо в чате!\n\n"
+        "или начни поиск видео прямо в чате, написав `@saveasyoutubeandtiktok_bot [запрос]`!\n\n"
         "⭐ Хочешь доступ к 4K, 2K, 144p и другим премиум-функциям? Напиши /sub",
-        reply_markup=keyboard,
         parse_mode="HTML"
     )
-
-@dp.callback_query(F.data == "open_sub")
-async def open_sub_callback(callback: types.CallbackQuery):
-    await cmd_subscribe(callback.message)
-    await callback.answer()
-
-@dp.callback_query(F.data == "open_help")
-async def open_help_callback(callback: types.CallbackQuery):
-    await cmd_help(callback.message)
-    await callback.answer()
 
 @dp.message(Command("sub"))
 async def cmd_subscribe(message: types.Message):
@@ -91,58 +73,6 @@ async def cmd_help(message: types.Message):
         reply_markup=keyboard,
         parse_mode="markdown"
     )
-
-# Обработка нажатия на кнопку поиска
-@dp.callback_query(F.data == "start_search")
-async def start_search_callback(callback: types.CallbackQuery, state: FSMContext):
-    await state.set_state(SearchState.waiting_for_query)
-    await callback.message.answer("🔍 Введите название или ключевые слова для поиска видео:")
-    await callback.answer()
-
-# Прием поискового запроса от пользователя в чате
-@dp.message(SearchState.waiting_for_query)
-async def process_search_query(message: types.Message, state: FSMContext):
-    query_text = message.text.strip()
-    await state.clear()
-
-    if not query_text:
-        await message.answer("❌ Запрос не может быть пустым.")
-        return
-
-    wait_msg = await message.answer("⏳ Ищу видео...")
-
-    ydl_opts = {'extract_flat': True, 'quiet': True, 'default_search': 'ytsearch50'}
-    try:
-        def search():
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(f"ytsearch50:{query_text}", download=False).get('entries', [])
-        
-        loop = asyncio.get_running_loop()
-        videos = await loop.run_in_executor(None, search)
-
-        if not videos:
-            await wait_msg.edit_text("❌ По вашему запросу ничего не найдено.")
-            return
-
-        text_result = f"🔍 **Результаты поиска по запросу:** `{query_text}`\n\n"
-        keyboard_rows = []
-
-        for i, v in enumerate(videos[:10]):
-            title = v.get('title', 'Видео')
-            url = v.get('url') or f"https://www.youtube.com/watch?v={v.get('id')}"
-            text_result += f"{i+1}. {title}\n🔗 {url}\n\n"
-            keyboard_rows.append([InlineKeyboardButton(text=f"🎬 Скачать №{i+1}", callback_data=f"dl_link|{url}")])
-
-        await wait_msg.edit_text(
-            text_result, 
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard_rows), 
-            parse_mode="markdown",
-            disable_web_page_preview=True
-        )
-
-    except Exception as e:
-        await wait_msg.edit_text("❌ Произошла ошибка при поиске.")
-        print(f"Ошибка поиска: {e}")
 
 # Покупка подписки за Telegram Stars
 @dp.callback_query(F.data.startswith("buy_"))
@@ -314,7 +244,6 @@ async def main():
     await set_main_menu(bot)
     print("Бот запущен!")
     
-    # Одновременный запуск веб-сервера и бота, чтобы Render не выдавал ошибку таймаута
     await asyncio.gather(
         web_server(),
         dp.start_polling(bot)
