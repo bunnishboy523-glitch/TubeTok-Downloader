@@ -20,7 +20,7 @@ import yt_dlp
 from aiohttp import web
 
 # ==== Токен читаем из переменной окружения, а не храним в коде ====
-TOKEN = os.environ.get("8613558590:AAEPGMyeGmNSMpDLFeIcuGr9HbujQdu54Zw")
+TOKEN = os.environ.get("BOT_TOKEN")
 if not TOKEN:
     raise RuntimeError(
         "Не задан токен бота. Установите переменную окружения BOT_TOKEN, "
