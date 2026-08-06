@@ -235,6 +235,24 @@ async def cmd_subscribe(message: types.Message, state: FSMContext):
     )
 
 
+ADMIN_IDS = {123456789}  # <-- впиши сюда свой Telegram user_id (узнать у @userinfobot)
+
+
+@dp.message(Command("grant"))
+async def cmd_grant(message: types.Message):
+    if message.from_user.id not in ADMIN_IDS:
+        return  # обычные пользователи даже не узнают, что команда существует
+
+    parts = message.text.split()
+    days = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 365
+    db_add_subscription(message.from_user.id, days)
+
+    expires = datetime.now() + timedelta(days=days)
+    await message.answer(
+        f"✅ Тебе выдана подписка до <b>{expires.strftime('%d.%m.%Y')}</b> (админ-режим)."
+    )
+
+
 @dp.message(Command("help"))
 async def cmd_help(message: types.Message, state: FSMContext):
     await state.clear()
@@ -516,6 +534,10 @@ async def main():
     logger.info("Бот запущен!")
 
     await asyncio.gather(web_server(), dp.start_polling(bot))
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 
 
 if __name__ == "__main__":
