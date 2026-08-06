@@ -9,7 +9,7 @@ from aiogram.fsm.state import State, StatesGroup
 import yt_dlp
 from aiohttp import web
 
-TOKEN = "8613558590:AAEPGMyeGmNSMpDLFeIcuGr9HbujQdu54Zw"
+TOKEN = "ТВОЙ_ТОКЕН_БОТА"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -299,10 +299,6 @@ async def main():
     await asyncio.gather(
         web_server(),
         dp.start_polling(bot)
-    )
-
-if __name__ == "__main__":
-    asyncio.run(main())
     )
 
 if __name__ == "__main__":
