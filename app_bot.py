@@ -311,11 +311,14 @@ async def web_server():
 
 async def main():
     logging.basicConfig(level=logging.INFO)
-    # Устанавливаем кнопку меню при запуске
     await set_main_menu(bot)
     print("Бот запущен!")
-    await web_server()
-    await dp.start_polling(bot)
+    
+    # Одновременный запуск веб-сервера и бота, чтобы Render не выдавал ошибку таймаута
+    await asyncio.gather(
+        web_server(),
+        dp.start_polling(bot)
+    )
 
 if __name__ == "__main__":
     asyncio.run(main())
