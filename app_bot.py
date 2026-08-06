@@ -7,7 +7,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, LabeledPri
 import yt_dlp
 from aiohttp import web
 
-TOKEN = "8613558590:AAEPGMyeGmNSMpDLFeIcuGr9HbujQdu54Zw"
+TOKEN = "ТВОЙ_ТОКЕН_БОТА"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -37,7 +37,7 @@ async def cmd_subscribe(message: types.Message):
         "✨ **SaveYouTube ПЛЮС**\n\n"
         "• Видео в качестве 4K, 2K, FULLHD, HD, 240p, 144p\n"
         "• Субтитры и скачивание плейлистов\n"
-        "• Скорость в 3 раза выше и без очереди\n\n"
+        "• Мгновенная скорость без ограничений по весу\n\n"
         "📅 **Выбери период:**",
         reply_markup=keyboard,
         parse_mode="markdown"
@@ -73,7 +73,7 @@ async def successful_payment(message: types.Message):
     subscribers.add(user_id)
     await message.answer("🎉 Спасибо за покупку! Подписка успешно активирована.")
 
-# Инлайн-поиск (увеличен до 10 результатов)
+# Инлайн-поиск (на 10 результатов)
 @dp.inline_query()
 async def inline_search(query: types.InlineQuery):
     text = query.query.strip()
@@ -141,16 +141,13 @@ async def handle_url(message: types.Message):
 async def locked_callback(callback: types.CallbackQuery):
     await callback.answer("🔒 Это качество доступно только по подписке SaveYouTube ПЛЮС! Напишите /sub", show_alert=True)
 
+# Моментальная выдача прямой ссылки (без лимитов Telegram и долгого скачивания)
 @dp.callback_query(F.data.startswith("dl|"))
 async def callback_download(callback: types.CallbackQuery):
     _, quality, url = callback.data.split("|", 2)
-    await callback.message.edit_text(f"⏳ Скачиваю видео (качество: {quality})...")
+    await callback.message.edit_text("⏳ Получаю быструю ссылку на файл...")
 
-    ydl_opts = {
-        'max_filesize': 50 * 1024 * 1024,
-        'outtmpl': 'downloaded_%(id)s.%(ext)s',
-        'format': 'best/bestvideo+bestaudio/best'
-    }
+    ydl_opts = {'quiet': True, 'format': 'best'}
 
     if quality == "4k":
         ydl_opts['format'] = 'bestvideo[height<=2160][ext=mp4]+bestaudio[ext=m4a]/best[height<=2160]'
@@ -161,37 +158,35 @@ async def callback_download(callback: types.CallbackQuery):
     elif quality == "144":
         ydl_opts['format'] = 'bestvideo[height<=144][ext=mp4]+bestaudio[ext=m4a]/best[height<=144]'
     elif quality == "mp3":
-        ydl_opts.update({
-            'format': 'bestaudio/best',
-            'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
-        })
+        ydl_opts['format'] = 'bestaudio/best'
 
     try:
-        def download():
+        def get_direct_link():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                return ydl.prepare_filename(info)
+                info = ydl.extract_info(url, download=False)
+                return info.get('url') or (info.get('entries')[0].get('url') if 'entries' in info else None)
 
         loop = asyncio.get_running_loop()
-        file_path = await loop.run_in_executor(None, download)
+        direct_url = await loop.run_in_executor(None, get_direct_link)
 
-        if quality == "mp3" and not file_path.endswith('.mp3'):
-            file_path = os.path.splitext(file_path)[0] + '.mp3'
+        if not direct_url:
+            await callback.message.edit_text("❌ Не удалось получить ссылку. Попробуйте другую.")
+            return
 
-        await callback.message.edit_text("📤 Загружаю файл в чат...")
-        
-        if quality == "mp3":
-            await callback.message.answer_audio(types.FSInputFile(file_path))
-        else:
-            await callback.message.answer_video(types.FSInputFile(file_path))
-        
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        await callback.message.delete()
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="📥 Скачать файл без ограничений", url=direct_url)]
+            ]
+        )
+        await callback.message.edit_text(
+            "✅ **Готово!** Нажми кнопку ниже, чтобы скачать видео на максимальной скорости:",
+            reply_markup=keyboard,
+            parse_mode="markdown"
+        )
 
     except Exception as e:
-        await callback.message.edit_text("❌ Ошибка при скачивании файла.")
-        print(f"Ошибка скачивания: {e}")
+        await callback.message.edit_text("❌ Ошибка при обработке ссылки.")
+        print(f"Ошибка: {e}")
 
 # Веб-сервер для удержания открытого порта на Render
 async def handle_ping(request):
