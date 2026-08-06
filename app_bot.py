@@ -3,7 +3,7 @@ import asyncio
 import os
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, LabeledPrice, InlineQueryResultArticle, InputTextMessageContent
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, LabeledPrice, BotCommand, InlineQueryResultArticle, InputTextMessageContent
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 import yt_dlp
@@ -20,6 +20,15 @@ subscribers = {8549738631, 8932750237}
 # Состояния для поиска через чат
 class SearchState(StatesGroup):
     waiting_for_query = State()
+
+# Установка кнопки Menu и команд в интерфейсе Telegram
+async def set_main_menu(bot: Bot):
+    commands = [
+        BotCommand(command="start", description="Главное меню"),
+        BotCommand(command="sub", description="⭐ Купить подписку (Плюс)"),
+        BotCommand(command="help", description="💬 Поддержка")
+    ]
+    await bot.set_my_commands(commands)
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -115,7 +124,6 @@ async def process_search_query(message: types.Message, state: FSMContext):
             await wait_msg.edit_text("❌ По вашему запросу ничего не найдено.")
             return
 
-        # Формируем список результатов (первые 10 штук для удобства вывода списком)
         text_result = f"🔍 **Результаты поиска по запросу:** `{query_text}`\n\n"
         keyboard_rows = []
 
@@ -166,7 +174,7 @@ async def successful_payment(message: types.Message):
     subscribers.add(user_id)
     await message.answer("🎉 Спасибо за покупку! Подписка успешно активирована.")
 
-# Инлайн-поиск (оставлен на случай, если кто-то захочет использовать через @)
+# Инлайн-поиск
 @dp.inline_query()
 async def inline_search(query: types.InlineQuery):
     text = query.query.strip()
@@ -203,14 +211,12 @@ async def inline_search(query: types.InlineQuery):
 
     await query.answer(results, cache_time=1)
 
-# Обработка выбора ссылки из результатов поиска по кнопке
 @dp.callback_query(F.data.startswith("dl_link|"))
 async def callback_dl_link(callback: types.CallbackQuery):
     _, url = callback.data.split("|", 1)
     await show_qualities(callback.message, url)
     await callback.answer()
 
-# Обработка отправленной ссылки (YouTube, TikTok и др.)
 @dp.message(F.text.contains("http://") | F.text.contains("https://"))
 async def handle_url(message: types.Message):
     words = message.text.split()
@@ -243,7 +249,6 @@ async def show_qualities(message: types.Message, url: str):
 async def locked_callback(callback: types.CallbackQuery):
     await callback.answer("🔒 Это качество доступно только по подписке SaveYouTube ПЛЮС! Напишите /sub", show_alert=True)
 
-# Моментальная выдача прямой ссылки
 @dp.callback_query(F.data.startswith("dl|"))
 async def callback_download(callback: types.CallbackQuery):
     _, quality, url = callback.data.split("|", 2)
@@ -287,7 +292,7 @@ async def callback_download(callback: types.CallbackQuery):
         )
 
     except Exception as e:
-        await callback.message.edit_text("❌ Ошибка при обработке ссылки.")
+        await callback.message.edit_text("❌ Произошла ошибка при обработке ссылки.")
         print(f"Ошибка: {e}")
 
 # Веб-сервер для удержания открытого порта на Render
@@ -306,6 +311,8 @@ async def web_server():
 
 async def main():
     logging.basicConfig(level=logging.INFO)
+    # Устанавливаем кнопку меню при запуске
+    await set_main_menu(bot)
     print("Бот запущен!")
     await web_server()
     await dp.start_polling(bot)
