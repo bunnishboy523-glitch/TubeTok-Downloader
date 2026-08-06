@@ -18,7 +18,7 @@ subscribers = {8549738631, 8932750237}
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     await message.answer(
-        "👋 Привет! Отправь мне ссылку на видео или используй инлайн-поиск в любом чате: "
+        "👋 Привет! Отправь мне ссылку на видео (YouTube / TikTok) или используй инлайн-поиск в любом чате: "
         "<code>@saveasyoutubeandtiktok_bot [запрос]</code>\n\n"
         "⭐ Хочешь доступ к 4K, 2K, 144p и другим премиум-функциям? Напиши /sub",
         parse_mode="HTML"
@@ -73,19 +73,19 @@ async def successful_payment(message: types.Message):
     subscribers.add(user_id)
     await message.answer("🎉 Спасибо за покупку! Подписка успешно активирована.")
 
-# Инлайн-поиск (работает в любых чатах и группах)
+# Инлайн-поиск (увеличен до 10 результатов)
 @dp.inline_query()
 async def inline_search(query: types.InlineQuery):
     text = query.query.strip()
     if not text:
         return
 
-    ydl_opts = {'extract_flat': True, 'quiet': True, 'default_search': 'ytsearch5'}
+    ydl_opts = {'extract_flat': True, 'quiet': True, 'default_search': 'ytsearch10'}
     results = []
     try:
         def search():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(f"ytsearch5:{text}", download=False).get('entries', [])
+                return ydl.extract_info(f"ytsearch10:{text}", download=False).get('entries', [])
         
         loop = asyncio.get_running_loop()
         videos = await loop.run_in_executor(None, search)
@@ -110,7 +110,7 @@ async def inline_search(query: types.InlineQuery):
 
     await query.answer(results, cache_time=1)
 
-# Обработка ссылки (в личке и в группах)
+# Обработка ссылки (YouTube, TikTok и др.)
 @dp.message(F.text.contains("http://") | F.text.contains("https://"))
 async def handle_url(message: types.Message):
     words = message.text.split()
@@ -146,7 +146,11 @@ async def callback_download(callback: types.CallbackQuery):
     _, quality, url = callback.data.split("|", 2)
     await callback.message.edit_text(f"⏳ Скачиваю видео (качество: {quality})...")
 
-    ydl_opts = {'max_filesize': 50 * 1024 * 1024}
+    ydl_opts = {
+        'max_filesize': 50 * 1024 * 1024,
+        'outtmpl': 'downloaded_%(id)s.%(ext)s',
+        'format': 'best/bestvideo+bestaudio/best'
+    }
 
     if quality == "4k":
         ydl_opts['format'] = 'bestvideo[height<=2160][ext=mp4]+bestaudio[ext=m4a]/best[height<=2160]'
@@ -160,7 +164,6 @@ async def callback_download(callback: types.CallbackQuery):
         ydl_opts.update({
             'format': 'bestaudio/best',
             'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3', 'preferredquality': '192'}],
-            'outtmpl': 'audio_%(id)s.%(ext)s',
         })
 
     try:
@@ -175,7 +178,7 @@ async def callback_download(callback: types.CallbackQuery):
         if quality == "mp3" and not file_path.endswith('.mp3'):
             file_path = os.path.splitext(file_path)[0] + '.mp3'
 
-        await callback.message.edit_text("📤 Загружаю файл...")
+        await callback.message.edit_text("📤 Загружаю файл в чат...")
         
         if quality == "mp3":
             await callback.message.answer_audio(types.FSInputFile(file_path))
@@ -188,7 +191,7 @@ async def callback_download(callback: types.CallbackQuery):
 
     except Exception as e:
         await callback.message.edit_text("❌ Ошибка при скачивании файла.")
-        print(e)
+        print(f"Ошибка скачивания: {e}")
 
 # Веб-сервер для удержания открытого порта на Render
 async def handle_ping(request):
