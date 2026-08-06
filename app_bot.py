@@ -1,7 +1,6 @@
 import logging
 import asyncio
 import os
-import aiohttp
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, LabeledPrice, BotCommand, InlineQueryResultArticle, InputTextMessageContent
@@ -10,12 +9,12 @@ from aiogram.fsm.state import State, StatesGroup
 import yt_dlp
 from aiohttp import web
 
-TOKEN = "8613558590:AAEPGMyeGmNSMpDLFeIcuGr9HbujQdu54Zw"
+TOKEN = "ТВОЙ_ТОКЕН_БОТА"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
-# База данных-заглушка для подписок (твои ID добавлены для бесплатного премиум-доступа)
+# База данных-заглушка для подписок
 subscribers = {8549738631, 8932750237}
 
 # Состояния для поиска через чат
@@ -25,7 +24,6 @@ class SearchState(StatesGroup):
 # Установка кнопки Menu и команд в интерфейсе Telegram при запуске
 async def set_main_menu(bot: Bot):
     commands = [
-        BotCommand(command="start", description="Главное меню"),
         BotCommand(command="search", description="🔍 Найти видео"),
         BotCommand(command="sub", description="⭐ Купить подписку (Плюс)"),
         BotCommand(command="help", description="💬 Поддержка")
@@ -113,7 +111,6 @@ async def cmd_subscribe(message: types.Message, state: FSMContext):
         parse_mode="markdown"
     )
 
-# Команда /help с контактами поддержки
 @dp.message(Command("help"))
 async def cmd_help(message: types.Message, state: FSMContext):
     await state.clear()
@@ -130,7 +127,6 @@ async def cmd_help(message: types.Message, state: FSMContext):
         parse_mode="markdown"
     )
 
-# Покупка подписки за Telegram Stars
 @dp.callback_query(F.data.startswith("buy_"))
 async def process_buy(callback: types.CallbackQuery):
     plan = callback.data.split("_")[1]
@@ -235,70 +231,56 @@ async def show_qualities(message: types.Message, url: str):
 async def locked_callback(callback: types.CallbackQuery):
     await callback.answer("🔒 Это качество доступно только по подписке SaveYouTube ПЛЮС! Напишите /sub", show_alert=True)
 
-# Скачивание через публичные API-зеркала (работает без кук и без банов на серверах)
+# Скачивание через встроенный yt-dlp с эмуляцией клиента Android/Web
 @dp.callback_query(F.data.startswith("dl|"))
 async def callback_download(callback: types.CallbackQuery):
     _, quality, url = callback.data.split("|", 2)
-    await callback.message.edit_text("⏳ Получаю быструю ссылку через API-зеркало...")
+    await callback.message.edit_text("⏳ Обрабатываю видео...")
 
-    video_id = None
-    if "youtu.be/" in url:
-        video_id = url.split("youtu.be/")[1].split("?")[0]
-    elif "watch?v=" in url:
-        video_id = url.split("watch?v=")[1].split("&")[0]
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+    }
 
-    if not video_id:
-        await callback.message.edit_text("❌ Не удалось распознать ID видео.")
-        return
+    if quality == "4k":
+        ydl_opts['format'] = 'best[height<=2160]/best'
+    elif quality == "1080":
+        ydl_opts['format'] = 'best[height<=1080]/best'
+    elif quality == "720":
+        ydl_opts['format'] = 'best[height<=720]/best'
+    elif quality == "144":
+        ydl_opts['format'] = 'best[height<=144]/best'
+    elif quality == "mp3":
+        ydl_opts['format'] = 'bestaudio/best'
 
-    instances = [
-        "https://invidious.privacyredirect.com",
-        "https://inv.nadeko.net",
-        "https://vid.puffyan.us"
-    ]
+    try:
+        def get_direct_link():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                return info.get('url') or (info.get('entries')[0].get('url') if 'entries' in info else None)
 
-    direct_url = None
-    async with aiohttp.ClientSession() as session:
-        for instance in instances:
-            api_url = f"{instance}/api/v1/videos/{video_id}"
-            try:
-                async with session.get(api_url, timeout=aiohttp.ClientTimeout(total=5)) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        adaptive_formats = data.get("adaptiveFormats", [])
-                        
-                        for fmt in adaptive_formats:
-                            if quality == "mp3" and "audio" in fmt.get("type", ""):
-                                direct_url = fmt.get("url")
-                                break
-                            elif quality != "mp3":
-                                res = fmt.get("resolution", "")
-                                if quality in res and "video" in fmt.get("type", ""):
-                                    direct_url = fmt.get("url")
-                                    break
-                        
-                        if not direct_url and adaptive_formats:
-                            direct_url = adaptive_formats[0].get("url")
-                            
-                        if direct_url:
-                            break
-            except Exception:
-                continue
+        loop = asyncio.get_running_loop()
+        direct_url = await loop.run_in_executor(None, get_direct_link)
 
-    if not direct_url:
-        await callback.message.edit_text("❌ Все зеркала перегружены. Попробуйте чуть позже.")
-        return
+        if not direct_url:
+            await callback.message.edit_text("❌ Не удалось получить ссылку. Попробуйте другую.")
+            return
 
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="📥 Скачать файл без ограничений", url=direct_url)]
-        ]
-    )
-    await callback.message.edit_text(
-        "✅ **Готово!** Нажми кнопку ниже, чтобы скачать файл:",
-        reply_markup=keyboard,
-        parse_mode="markdown"
-    )
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="📥 Скачать файл без ограничений", url=direct_url)]
+            ]
+        )
+        await callback.message.edit_text(
+            "✅ **Готово!** Нажми кнопку ниже, чтобы скачать видео:",
+            reply_markup=keyboard,
+            parse_mode="markdown"
+        )
+
+    except Exception as e:
+        await callback.message.edit_text("❌ Ошибка обработки ссылки.")
+        print(f"Ошибка: {e}")
 
 # Веб-сервер для удержания открытого порта на Render
 async def handle_ping(request):
