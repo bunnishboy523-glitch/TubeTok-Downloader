@@ -25,6 +25,7 @@ class SearchState(StatesGroup):
 async def set_main_menu(bot: Bot):
     commands = [
         BotCommand(command="start", description="Главное меню"),
+        BotCommand(command="search", description="🔍 Найти видео"),
         BotCommand(command="sub", description="⭐ Купить подписку (Плюс)"),
         BotCommand(command="help", description="💬 Поддержка")
     ]
@@ -34,10 +35,61 @@ async def set_main_menu(bot: Bot):
 async def cmd_start(message: types.Message):
     await message.answer(
         "👋 Привет! Отправь мне ссылку на видео (YouTube / TikTok) для скачивания, "
-        "или начни поиск видео прямо в чате, написав `@saveasyoutubeandtiktok_bot [запрос]`!\n\n"
+        "или используй команду /search для поиска видео прямо в чате!\n\n"
         "⭐ Хочешь доступ к 4K, 2K, 144p и другим премиум-функциям? Напиши /sub",
         parse_mode="HTML"
     )
+
+# Команда /search для поиска видео
+@dp.message(Command("search"))
+async def cmd_search(message: types.Message, state: FSMContext):
+    await state.set_state(SearchState.waiting_for_query)
+    await message.answer("🔍 Введите название или ключевые слова для поиска видео:")
+
+# Прием поискового запроса от пользователя в чате
+@dp.message(SearchState.waiting_for_query)
+async def process_search_query(message: types.Message, state: FSMContext):
+    query_text = message.text.strip()
+    await state.clear()
+
+    if not query_text:
+        await message.answer("❌ Запрос не может быть пустым.")
+        return
+
+    wait_msg = await message.answer("⏳ Ищу видео...")
+
+    ydl_opts = {'extract_flat': True, 'quiet': True, 'default_search': 'ytsearch50'}
+    try:
+        def search():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(f"ytsearch50:{query_text}", download=False).get('entries', [])
+        
+        loop = asyncio.get_running_loop()
+        videos = await loop.run_in_executor(None, search)
+
+        if not videos:
+            await wait_msg.edit_text("❌ По вашему запросу ничего не найдено.")
+            return
+
+        text_result = f"🔍 **Результаты поиска по запросу:** `{query_text}`\n\n"
+        keyboard_rows = []
+
+        for i, v in enumerate(videos[:10]):
+            title = v.get('title', 'Видео')
+            url = v.get('url') or f"https://www.youtube.com/watch?v={v.get('id')}"
+            text_result += f"{i+1}. {title}\n🔗 {url}\n\n"
+            keyboard_rows.append([InlineKeyboardButton(text=f"🎬 Скачать №{i+1}", callback_data=f"dl_link|{url}")])
+
+        await wait_msg.edit_text(
+            text_result, 
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard_rows), 
+            parse_mode="markdown",
+            disable_web_page_preview=True
+        )
+
+    except Exception as e:
+        await wait_msg.edit_text("❌ Произошла ошибка при поиске.")
+        print(f"Ошибка поиска: {e}")
 
 @dp.message(Command("sub"))
 async def cmd_subscribe(message: types.Message):
@@ -247,6 +299,10 @@ async def main():
     await asyncio.gather(
         web_server(),
         dp.start_polling(bot)
+    )
+
+if __name__ == "__main__":
+    asyncio.run(main())
     )
 
 if __name__ == "__main__":
