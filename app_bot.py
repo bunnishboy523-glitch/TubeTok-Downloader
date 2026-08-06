@@ -4,10 +4,12 @@ import os
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, LabeledPrice, InlineQueryResultArticle, InputTextMessageContent
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 import yt_dlp
 from aiohttp import web
 
-TOKEN = "ТВОЙ_ТОКЕН_БОТА"
+TOKEN = "8613558590:AAEPGMyeGmNSMpDLFeIcuGr9HbujQdu54Zw"
 
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -15,14 +17,36 @@ dp = Dispatcher()
 # База данных-заглушка для подписок (твои ID добавлены для бесплатного премиум-доступа)
 subscribers = {8549738631, 8932750237}
 
+# Состояния для поиска через чат
+class SearchState(StatesGroup):
+    waiting_for_query = State()
+
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔍 Найти видео через бота", callback_data="start_search")],
+            [InlineKeyboardButton(text="⭐ Премиум (/sub)", callback_data="open_sub")],
+            [InlineKeyboardButton(text="💬 Поддержка (/help)", callback_data="open_help")]
+        ]
+    )
     await message.answer(
-        "👋 Привет! Отправь мне ссылку на видео (YouTube / TikTok) или используй инлайн-поиск в любом чате: "
-        "<code>@saveasyoutubeandtiktok_bot [запрос]</code>\n\n"
+        "👋 Привет! Отправь мне ссылку на видео (YouTube / TikTok) для скачивания, "
+        "или нажми кнопку ниже, чтобы начать поиск видео прямо в чате!\n\n"
         "⭐ Хочешь доступ к 4K, 2K, 144p и другим премиум-функциям? Напиши /sub",
+        reply_markup=keyboard,
         parse_mode="HTML"
     )
+
+@dp.callback_query(F.data == "open_sub")
+async def open_sub_callback(callback: types.CallbackQuery):
+    await cmd_subscribe(callback.message)
+    await callback.answer()
+
+@dp.callback_query(F.data == "open_help")
+async def open_help_callback(callback: types.CallbackQuery):
+    await cmd_help(callback.message)
+    await callback.answer()
 
 @dp.message(Command("sub"))
 async def cmd_subscribe(message: types.Message):
@@ -42,6 +66,75 @@ async def cmd_subscribe(message: types.Message):
         reply_markup=keyboard,
         parse_mode="markdown"
     )
+
+# Команда /help с контактами поддержки
+@dp.message(Command("help"))
+async def cmd_help(message: types.Message):
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="👤 Поддержка 1", url="https://t.me/bshbmw")],
+            [InlineKeyboardButton(text="👤 Поддержка 2", url="https://t.me/bunbmw")]
+        ]
+    )
+    await message.answer(
+        "💬 **Служба поддержки**\n\n"
+        "Если у вас возникли вопросы по работе бота, оплате подписки или появились предложения, вы можете обратиться к нашей администрации:",
+        reply_markup=keyboard,
+        parse_mode="markdown"
+    )
+
+# Обработка нажатия на кнопку поиска
+@dp.callback_query(F.data == "start_search")
+async def start_search_callback(callback: types.CallbackQuery, state: FSMContext):
+    await state.set_state(SearchState.waiting_for_query)
+    await callback.message.answer("🔍 Введите название или ключевые слова для поиска видео:")
+    await callback.answer()
+
+# Прием поискового запроса от пользователя в чате
+@dp.message(SearchState.waiting_for_query)
+async def process_search_query(message: types.Message, state: FSMContext):
+    query_text = message.text.strip()
+    await state.clear()
+
+    if not query_text:
+        await message.answer("❌ Запрос не может быть пустым.")
+        return
+
+    wait_msg = await message.answer("⏳ Ищу видео...")
+
+    ydl_opts = {'extract_flat': True, 'quiet': True, 'default_search': 'ytsearch50'}
+    try:
+        def search():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(f"ytsearch50:{query_text}", download=False).get('entries', [])
+        
+        loop = asyncio.get_running_loop()
+        videos = await loop.run_in_executor(None, search)
+
+        if not videos:
+            await wait_msg.edit_text("❌ По вашему запросу ничего не найдено.")
+            return
+
+        # Формируем список результатов (первые 10 штук для удобства вывода списком)
+        text_result = f"🔍 **Результаты поиска по запросу:** `{query_text}`\n\n"
+        keyboard_rows = []
+
+        for i, v in enumerate(videos[:10]):
+            title = v.get('title', 'Видео')
+            url = v.get('url') or f"https://www.youtube.com/watch?v={v.get('id')}"
+            text_result += f"{i+1}. {title}\n🔗 {url}\n\n"
+            keyboard_rows.append([InlineKeyboardButton(text=f"🎬 Скачать №{i+1}", callback_data=f"dl_link|{url}")])
+
+        await wait_msg.edit_text(
+            text_result, 
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=keyboard_rows), 
+            parse_mode="markdown",
+            disable_web_page_preview=True
+        )
+
+    except Exception as e:
+        await wait_msg.edit_text("❌ Произошла ошибка при поиске.")
+        print(f"Ошибка поиска: {e}")
 
 # Покупка подписки за Telegram Stars
 @dp.callback_query(F.data.startswith("buy_"))
@@ -73,19 +166,19 @@ async def successful_payment(message: types.Message):
     subscribers.add(user_id)
     await message.answer("🎉 Спасибо за покупку! Подписка успешно активирована.")
 
-# Инлайн-поиск (на 10 результатов)
+# Инлайн-поиск (оставлен на случай, если кто-то захочет использовать через @)
 @dp.inline_query()
 async def inline_search(query: types.InlineQuery):
     text = query.query.strip()
     if not text:
         return
 
-    ydl_opts = {'extract_flat': True, 'quiet': True, 'default_search': 'ytsearch10'}
+    ydl_opts = {'extract_flat': True, 'quiet': True, 'default_search': 'ytsearch50'}
     results = []
     try:
         def search():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(f"ytsearch10:{text}", download=False).get('entries', [])
+                return ydl.extract_info(f"ytsearch50:{text}", download=False).get('entries', [])
         
         loop = asyncio.get_running_loop()
         videos = await loop.run_in_executor(None, search)
@@ -110,14 +203,23 @@ async def inline_search(query: types.InlineQuery):
 
     await query.answer(results, cache_time=1)
 
-# Обработка ссылки (YouTube, TikTok и др.)
+# Обработка выбора ссылки из результатов поиска по кнопке
+@dp.callback_query(F.data.startswith("dl_link|"))
+async def callback_dl_link(callback: types.CallbackQuery):
+    _, url = callback.data.split("|", 1)
+    await show_qualities(callback.message, url)
+    await callback.answer()
+
+# Обработка отправленной ссылки (YouTube, TikTok и др.)
 @dp.message(F.text.contains("http://") | F.text.contains("https://"))
 async def handle_url(message: types.Message):
     words = message.text.split()
     url = next((w for w in words if w.startswith("http://") or w.startswith("https://")), None)
     if not url:
         return
+    await show_qualities(message, url)
 
+async def show_qualities(message: types.Message, url: str):
     is_sub = message.from_user.id in subscribers
 
     if is_sub:
@@ -141,7 +243,7 @@ async def handle_url(message: types.Message):
 async def locked_callback(callback: types.CallbackQuery):
     await callback.answer("🔒 Это качество доступно только по подписке SaveYouTube ПЛЮС! Напишите /sub", show_alert=True)
 
-# Моментальная выдача прямой ссылки (без лимитов Telegram и долгого скачивания)
+# Моментальная выдача прямой ссылки
 @dp.callback_query(F.data.startswith("dl|"))
 async def callback_download(callback: types.CallbackQuery):
     _, quality, url = callback.data.split("|", 2)
