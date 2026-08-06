@@ -47,7 +47,7 @@ async def cmd_search(message: types.Message, state: FSMContext):
     await state.set_state(SearchState.waiting_for_query)
     await message.answer("🔍 Введите название или ключевые слова для поиска видео:")
 
-# Прием поискового запроса от пользователя в чате (с защитой от банов через player_client)
+# Прием поискового запроса от пользователя в чате
 @dp.message(SearchState.waiting_for_query)
 async def process_search_query(message: types.Message, state: FSMContext):
     query_text = message.text.strip()
@@ -210,6 +210,51 @@ async def callback_dl_link(callback: types.CallbackQuery):
     await show_qualities(callback.message, url)
     await callback.answer()
 
+# Обработка ссылок TikTok
+@dp.message(F.text.contains("tiktok.com") | F.text.contains("vm.tiktok.com"))
+async def handle_tiktok(message: types.Message):
+    words = message.text.split()
+    url = next((w for w in words if "tiktok.com" in w), None)
+    if not url:
+        return
+
+    wait_msg = await message.answer("⏳ Скачиваю видео из TikTok...")
+
+    ydl_opts = {
+        'quiet': True,
+        'no_warnings': True,
+        'format': 'best',
+    }
+
+    try:
+        def get_tiktok_link():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                return info.get('url')
+
+        loop = asyncio.get_running_loop()
+        direct_url = await loop.run_in_executor(None, get_tiktok_link)
+
+        if not direct_url:
+            await wait_msg.edit_text("❌ Не удалось получить видео из TikTok.")
+            return
+
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="📥 Скачать видео без водяного знака", url=direct_url)]
+            ]
+        )
+        await wait_msg.edit_text(
+            "✅ **Готово!** Нажми кнопку ниже, чтобы открыть видео:",
+            reply_markup=keyboard,
+            parse_mode="markdown"
+        )
+
+    except Exception as e:
+        await wait_msg.edit_text("❌ Ошибка при скачивании из TikTok.")
+        print(f"Ошибка TikTok: {e}")
+
+# Обработка обычных ссылок YouTube
 @dp.message(F.text.contains("http://") | F.text.contains("https://"))
 async def handle_url(message: types.Message):
     words = message.text.split()
@@ -242,7 +287,7 @@ async def show_qualities(message: types.Message, url: str):
 async def locked_callback(callback: types.CallbackQuery):
     await callback.answer("🔒 Это качество доступно только по подписке SaveYouTube ПЛЮС! Напишите /sub", show_alert=True)
 
-# Скачивание через встроенный yt-dlp с эмуляцией клиента Android/Web
+# Скачивание YouTube через yt-dlp с эмуляцией клиента Android/Web
 @dp.callback_query(F.data.startswith("dl|"))
 async def callback_download(callback: types.CallbackQuery):
     _, quality, url = callback.data.split("|", 2)
