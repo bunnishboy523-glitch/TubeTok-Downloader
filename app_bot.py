@@ -24,6 +24,7 @@ class SearchState(StatesGroup):
 # Установка кнопки Menu и команд в интерфейсе Telegram при запуске
 async def set_main_menu(bot: Bot):
     commands = [
+        BotCommand(command="start", description="Главное меню"),
         BotCommand(command="search", description="🔍 Найти видео"),
         BotCommand(command="sub", description="⭐ Купить подписку (Плюс)"),
         BotCommand(command="help", description="💬 Поддержка")
@@ -46,7 +47,7 @@ async def cmd_search(message: types.Message, state: FSMContext):
     await state.set_state(SearchState.waiting_for_query)
     await message.answer("🔍 Введите название или ключевые слова для поиска видео:")
 
-# Прием поискового запроса от пользователя в чате
+# Прием поискового запроса от пользователя в чате (с защитой от банов через player_client)
 @dp.message(SearchState.waiting_for_query)
 async def process_search_query(message: types.Message, state: FSMContext):
     query_text = message.text.strip()
@@ -58,11 +59,16 @@ async def process_search_query(message: types.Message, state: FSMContext):
 
     wait_msg = await message.answer("⏳ Ищу видео...")
 
-    ydl_opts = {'extract_flat': True, 'quiet': True, 'default_search': 'ytsearch50'}
+    ydl_opts = {
+        'extract_flat': True,
+        'quiet': True,
+        'default_search': 'ytsearch10',
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+    }
     try:
         def search():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(f"ytsearch50:{query_text}", download=False).get('entries', [])
+                return ydl.extract_info(f"ytsearch10:{query_text}", download=False).get('entries', [])
         
         loop = asyncio.get_running_loop()
         videos = await loop.run_in_executor(None, search)
@@ -163,12 +169,17 @@ async def inline_search(query: types.InlineQuery):
     if not text:
         return
 
-    ydl_opts = {'extract_flat': True, 'quiet': True, 'default_search': 'ytsearch50'}
+    ydl_opts = {
+        'extract_flat': True, 
+        'quiet': True, 
+        'default_search': 'ytsearch10',
+        'extractor_args': {'youtube': {'player_client': ['android', 'web']}}
+    }
     results = []
     try:
         def search():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(f"ytsearch50:{text}", download=False).get('entries', [])
+                return ydl.extract_info(f"ytsearch10:{text}", download=False).get('entries', [])
         
         loop = asyncio.get_running_loop()
         videos = await loop.run_in_executor(None, search)
